@@ -5,13 +5,12 @@ Upload metadata from selected ISA Excel file to OMERO.
 This script prompts the user to:
 - Choose a file type: Investigation, Study, or Assay
 - Provide OMERO credentials (host, username, password)
-- Enter Project ID (for Investigation/Study) or Dataset ID (for Assay)
+- Enter Project ID (for Investigation/Study/Assay)
 - Extract metadata and upload it as key-value pairs to OMERO
 '''
 
 import omero
 from omero.gateway import BlitzGateway, MapAnnotationWrapper
-from ezomero import post_map_annotation
 import pandas as pd
 import os
 import getpass
@@ -68,10 +67,11 @@ def apply_metadata(obj, metadata, conn):
     obj_type = obj.OMERO_CLASS
     print(obj_type)
     for namespace, values in metadata.items():
-        print(namespace)
-        print(values)
-        post_map_annotation(conn, object_type=obj_type, object_id=obj_id, kv_dict=values, ns=namespace)  # Ensure correct argument order
-
+        map_ann = MapAnnotationWrapper(conn)
+        map_ann.setNs(namespace)
+        map_ann.setValue(list(values.items()))  # Convert dict to key-value list
+        map_ann.save()
+        obj.linkAnnotation(map_ann)  # Link annotation to the object
 
 def main():
     print("\n--- OMERO Metadata Uploader ---")
@@ -91,14 +91,14 @@ def main():
     
     file_path = prompt_user_input(f"Path to isa.{file_type.lower()}.xlsx: ", optional=False)
     
-    if file_type in ["Investigation", "Study"]:
+    if file_type in ["Investigation", "Study", "Assay"]:
         object_id = prompt_user_input("OMERO Project ID: ", optional=False)
         omero_object = conn.getObject("Project", object_id)
         print(omero_object)
-    else:
-        object_id = prompt_user_input("OMERO Dataset ID: ", optional=False)
-        omero_object = conn.getObject("Dataset", object_id)
-        print(omero_object)
+    #else:
+        #object_id = prompt_user_input("OMERO Dataset ID: ", optional=False)
+        #omero_object = conn.getObject("Dataset", object_id)
+        #print(omero_object)
     
     if not omero_object:
         print("Invalid OMERO ID. Exiting.")
