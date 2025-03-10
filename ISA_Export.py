@@ -2,6 +2,7 @@ import omero
 from omero.gateway import BlitzGateway
 import pandas as pd
 import getpass
+import re
 
 
 def fetch_metadata_from_project(conn, object_type, object_id):
@@ -42,6 +43,7 @@ def fetch_metadata_from_project(conn, object_type, object_id):
 
     isa_namespaces_assay = [
         "ARC:ISA:ASSAY:ASSAY",
+        "ARC:ISA:ASSAY:ASSAY PERFORMERS",
         "ARC:ISA:ASSAY:ASSAY DESIGN DESCRIPTORS",
         "ARC:ISA:ASSAY:ASSAY PUBLICATIONS",
         "ARC:ISA:ASSAY:ASSAY FACTORS",
@@ -77,11 +79,10 @@ def fetch_metadata_from_project(conn, object_type, object_id):
     metadata_study_Ordered = {key: metadata_study[key] for key in isa_namespaces_study if key in metadata_study}
     metadata_assay_Ordered = {key: metadata_assay[key] for key in isa_namespaces_assay if key in metadata_assay}
 
+    #print(metadata_investigation_Ordered)
+    #print(other_metadata) 
     return metadata_investigation_Ordered, metadata_study_Ordered, metadata_assay_Ordered, other_metadata
 
-
-# To print return values seperately.
-# metadata_investigation_Ordered, metadata_study_Ordered, metadata_assay_Ordered, other_metadata_Ordered = fetch_metadata_from_project(conn, 'Project', 1270)
 
 
 # Function to save metadata to excel
@@ -92,30 +93,45 @@ def save_metadata_to_excel(metadata_investigation_Ordered, metadata_study_Ordere
         "isa.study.xlsx": metadata_study_Ordered,
         "isa.assay.xlsx": metadata_assay_Ordered
     }
+
     
     for filename, metadata in files.items():
-        if metadata != {} :  # If the metadata is empty, do not create an excel sheet.
-          with pd.ExcelWriter(filename) as writer:
-            flat_data = []
-            for namespace, kv_pairs in metadata.items():
-                header = namespace.split(":")[-1]
-                flat_data.append((header, ""))
-                for key, values in kv_pairs.items():
-                    value_str = ", ".join(values)
-                    flat_data.append((key, value_str))
-            df = pd.DataFrame(flat_data, columns=["Key","Value"])
-            print(df)
-            df.to_excel(writer, sheet_name=filename[0:3]+ "_" +filename[4:-5], index=False, header=False)   
-        
+        if metadata != {} :  # If the metadata is not empty, create an excel sheet.
+            # Maximum length of columns. Count of number of values.
+            max_len = max(len(re.findall(r"'(.*?)'",values[0])) for keys in metadata.values() for values in keys.values())
+            print("Maxium number of columns :", max_len)
+            with pd.ExcelWriter(filename) as writer:
+                rows = []
+                for namespace, kv_pairs in metadata.items():
+                    # Get header value and add it as first column row.
+                    header = namespace.split(":")[-1]
+                    rows.append([header] + [''] * max_len)
+                    #Add the keys and values.
+                    for key, values in kv_pairs.items():
+                        #Extract values inside single quotes as one sigle string.
+                        value_str = re.findall(r"'(.*?)'", values[0])
+                        # Pad the extracted value string with empty strings to match max_values.
+                        value_str += [''] * (max_len - len(value_str))
+                        # Create row with the key followed by value_str columns.
+                        row = [key] + value_str
+                        rows.append(row)
+                # Create a dataframe and save it to Excel.        
+                df = pd.DataFrame(rows)
+                print(df)
+                df.to_excel(writer, sheet_name=filename[0:3]+ "_" +filename[4:-5], index=False, header=False)   
+            
         elif metadata == {}:
           print("No relevant metadata found for", filename)
 
     if other_metadata != {}:
-          with pd.ExcelWriter("ExtraMetadata.xlsx") as writer:  
-            for namespace, kv_pairs in other_metadata.items():
-                df_other = pd.DataFrame([(key, ", ".join(value)) for key, value in kv_pairs.items()], columns=["Key", "Value"])
-                df_other.to_excel(writer, index=False, header=False)
-          print('Additonal key-value pairs in the ExtaMetadata.xlsx')      
+            # Maximum length of columns. Count of number of values. Count vaulues inside single quotes.
+            max_len = max(len(re.findall(r"'(.*?)'",values[0])) for keys in metadata_investigation_Ordered.values() for values in keys.values())
+            print(max_len)
+            with pd.ExcelWriter("ExtraMetadata.xlsx") as writer:  
+                for namespace, kv_pairs in other_metadata.items():
+                    df_other = pd.DataFrame([(key, ", ".join(value)) for key, value in kv_pairs.items()], columns=["Key", "Value"])
+                    df_other.to_excel(writer, index=False, header=False)
+            print('Additonal key-value pairs in the ExtaMetadata.xlsx')      
 
 
 #Main function
