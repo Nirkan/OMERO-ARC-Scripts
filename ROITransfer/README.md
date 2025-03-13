@@ -1,1 +1,3 @@
-### Scripts to transfer Regions of Interest (ROIs) from OMERO as json file.
+### About
+
+Transfer Regions of Interest (ROIs) from OMERO as json file and from json to OMERO.
